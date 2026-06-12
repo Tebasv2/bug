@@ -1,0 +1,6 @@
+python-telegram-bot==21.5
+injective-py==1.6.1
+cryptography==42.0.8
+sqlalchemy==2.0.35
+aiosqlite==0.20.0
+python-dotenv==1.0.1
