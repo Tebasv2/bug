@@ -85,7 +85,7 @@ async def send_inj(
 
     amount_int = int(amount * Decimal(10 ** INJ_DECIMALS))
 
-    msg = composer.msg_send(
+    msg = composer.MsgSend(
         from_address=acc_bech32,
         to_address=receiver_address,
         amount=amount_int,
