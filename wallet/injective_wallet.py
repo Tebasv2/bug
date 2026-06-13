@@ -1,4 +1,5 @@
 import os
+import base64
 import aiohttp
 from decimal import Decimal
 from pyinjective.core.network import Network
@@ -107,8 +108,19 @@ async def send_inj(
     sig = private_key.sign(sign_doc.SerializeToString())
     tx_raw_bytes = tx.get_tx_data(sig, pub_key)
 
-    resp = await client.broadcast_tx_sync_mode(tx_raw_bytes)
-    tx_hash = resp.tx_response.txhash
-    if resp.tx_response.code != 0:
-        raise RuntimeError(f"Transaction failed: {resp.tx_response.raw_log}")
+    # Broadcast via LCD REST — more reliable than gRPC for tx submission
+    tx_b64 = base64.b64encode(tx_raw_bytes).decode()
+    lcd = network.lcd_endpoint
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{lcd}/cosmos/tx/v1beta1/txs",
+            json={"tx_bytes": tx_b64, "mode": "BROADCAST_MODE_SYNC"},
+        ) as r:
+            result = await r.json()
+
+    tx_response = result.get("tx_response", {})
+    code = tx_response.get("code", 0)
+    tx_hash = tx_response.get("txhash", "")
+    if code != 0:
+        raise RuntimeError(f"Transaction failed (code {code}): {tx_response.get('raw_log', '')}")
     return tx_hash
