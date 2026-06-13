@@ -4,8 +4,9 @@ from telegram.ext import ContextTypes
 
 from db.database import get_session
 from db import repository
-from wallet.injective_wallet import create_wallet, get_balance, send_inj, MIN_GAS_RESERVE
+from wallet.injective_wallet import create_wallet, get_balance, send_inj, send_token, send_nft, MIN_GAS_RESERVE
 from wallet.crypto import decrypt_private_key
+from wallet.tokens import resolve_token, resolve_nft, TOKENS, NFTS
 from utils.parsing import parse_tip_command
 
 
@@ -233,7 +234,7 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await message.reply_text(f"Usage: @{bot_username} tip @username 0.1 INJ")
         return
 
-    target_username, amount = parsed
+    target_username, amount, symbol = parsed
     sender = update.effective_user
 
     async with get_session() as session:
@@ -259,51 +260,83 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             await message.reply_text("You can't tip yourself.")
             return
 
+        nft_info = resolve_nft(symbol)
+        token_info = resolve_token(symbol)
+
+        if not nft_info and not token_info:
+            supported = ", ".join(list(TOKENS.keys()) + list(NFTS.keys()))
+            await message.reply_text(
+                f"Unknown token or NFT: <code>{_h(symbol)}</code>.\nSupported: <code>{_h(supported)}</code>",
+                parse_mode="HTML",
+            )
+            return
+
         try:
-            balance = await get_balance(sender_wallet.address)
-            if balance < amount + MIN_GAS_RESERVE:
-                await message.reply_text(
-                    f"@{_h(sender.username)}, insufficient balance. "
-                    f"You have <code>{balance:.6f} INJ</code> (need {amount} + {MIN_GAS_RESERVE} for gas).",
-                    parse_mode="HTML",
-                )
-                return
-
-            tx_hash = await send_inj(
-                sender_wallet.encrypted_private_key,
-                receiver_wallet.address,
-                amount,
-            )
-
-            await repository.save_transaction(
-                session, tx_hash=tx_hash, sender_id=sender.id,
-                receiver_id=receiver_wallet.user_id, amount=str(amount),
-                chat_id=message.chat_id,
-            )
-
             sender_name = sender.username or sender.first_name
+
+            if nft_info:
+                # NFT tip
+                try:
+                    token_id, tx_hash = await send_nft(
+                        sender_wallet.encrypted_private_key,
+                        receiver_wallet.address,
+                        nft_info["contract"],
+                    )
+                except RuntimeError as e:
+                    await message.reply_text(f"NFT tip failed: {_h(str(e))}", parse_mode="HTML")
+                    return
+
+                await repository.save_transaction(
+                    session, tx_hash=tx_hash, sender_id=sender.id,
+                    receiver_id=receiver_wallet.user_id, amount=token_id,
+                    chat_id=message.chat_id,
+                )
+                tip_text = f"<code>#{_h(token_id)}</code> {_h(nft_info['display'])}"
+                dm_text = f"🎉 <b>You received an NFT!</b>\n\n<b>@{_h(sender_name)}</b> sent you {tip_text}\n\nTx: <code>{_h(tx_hash)}</code>"
+            else:
+                # Fungible token tip
+                balance = await get_balance(sender_wallet.address)
+                if balance < MIN_GAS_RESERVE:
+                    await message.reply_text(
+                        f"@{_h(sender.username)}, insufficient INJ for gas. "
+                        f"You need at least <code>{MIN_GAS_RESERVE} INJ</code>.",
+                        parse_mode="HTML",
+                    )
+                    return
+
+                tx_hash = await send_token(
+                    sender_wallet.encrypted_private_key,
+                    receiver_wallet.address,
+                    amount,
+                    token_info,
+                )
+
+                await repository.save_transaction(
+                    session, tx_hash=tx_hash, sender_id=sender.id,
+                    receiver_id=receiver_wallet.user_id,
+                    amount=f"{amount} {token_info['display']}",
+                    chat_id=message.chat_id,
+                )
+                tip_text = f"<code>{amount} {_h(token_info['display'])}</code>"
+                dm_text = f"🎉 <b>You received a tip!</b>\n\n<b>@{_h(sender_name)}</b> tipped you {tip_text}\n\nTx: <code>{_h(tx_hash)}</code>"
+
             await message.reply_text(
                 f"✅ <b>Tip sent!</b>\n\n"
                 f"<b>@{_h(sender_name)}</b> ➡️ <b>@{_h(target_username)}</b>\n"
-                f"Amount: <code>{amount} INJ</code>\n"
+                f"Amount: {tip_text}\n"
                 f"Tx: <code>{_h(tx_hash)}</code>",
                 parse_mode="HTML",
             )
 
-            # DM the receiver
             try:
                 await context.bot.send_message(
                     chat_id=receiver_wallet.user_id,
-                    text=(
-                        f"🎉 <b>You received a tip!</b>\n\n"
-                        f"<b>@{_h(sender_name)}</b> tipped you <code>{amount} INJ</code>\n\n"
-                        f"Tx: <code>{_h(tx_hash)}</code>"
-                    ),
+                    text=dm_text,
                     parse_mode="HTML",
                     reply_markup=_main_menu(),
                 )
             except Exception:
-                pass  # receiver hasn't started the bot in DM
+                pass
 
         except Exception as e:
             await message.reply_text(f"Tip failed: {_h(str(e))}", parse_mode="HTML")
