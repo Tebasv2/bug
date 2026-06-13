@@ -8,6 +8,11 @@ from wallet.injective_wallet import create_wallet, get_balance, send_inj, MIN_GA
 from utils.parsing import parse_tip_command
 
 
+def _h(text: str) -> str:
+    """Escape text for HTML parse mode."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     async with get_session() as session:
@@ -15,9 +20,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if existing:
             await update.message.reply_text(
                 f"You already have a wallet!\n\n"
-                f"Address: `{existing.address}`\n\n"
+                f"Address:\n<code>{_h(existing.address)}</code>\n\n"
                 f"Use /balance to check your balance.",
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
             return
 
@@ -31,13 +36,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
     await update.message.reply_text(
-        f"✅ *Wallet Created!*\n\n"
-        f"*Address:*\n`{address}`\n\n"
-        f"*Private Key:*\n`{private_key_hex}`\n\n"
-        f"*Secret Phrase (12 words):*\n`{mnemonic}`\n\n"
-        f"⚠️ *Save your secret phrase and private key somewhere safe — they will NOT be shown again. Anyone with these can access your funds.*\n\n"
+        f"✅ <b>Wallet Created!</b>\n\n"
+        f"<b>Address:</b>\n<code>{_h(address)}</code>\n\n"
+        f"<b>Private Key:</b>\n<code>{_h(private_key_hex)}</code>\n\n"
+        f"<b>Secret Phrase (12 words):</b>\n<code>{_h(mnemonic)}</code>\n\n"
+        f"⚠️ <b>Save your secret phrase and private key somewhere safe — they will NOT be shown again. Anyone with these can access your funds.</b>\n\n"
         f"Fund your wallet with INJ and use /balance to check your balance.",
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
 
 
@@ -53,11 +58,11 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         balance = await get_balance(wallet.address)
         await update.message.reply_text(
-            f"Balance: `{balance:.6f} INJ`\nAddress: `{wallet.address}`",
-            parse_mode="Markdown",
+            f"Balance: <code>{balance:.6f} INJ</code>\nAddress: <code>{_h(wallet.address)}</code>",
+            parse_mode="HTML",
         )
     except Exception as e:
-        await update.message.reply_text(f"Could not fetch balance: {e}")
+        await update.message.reply_text(f"Could not fetch balance: {_h(str(e))}", parse_mode="HTML")
 
 
 async def cmd_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -70,8 +75,8 @@ async def cmd_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     await update.message.reply_text(
-        f"Your wallet address:\n`{wallet.address}`",
-        parse_mode="Markdown",
+        f"Your wallet address:\n<code>{_h(wallet.address)}</code>",
+        parse_mode="HTML",
     )
 
 
@@ -80,7 +85,7 @@ async def cmd_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     args = context.args
 
     if len(args) != 2:
-        await update.message.reply_text("Usage: /withdraw <address> <amount>\nExample: /withdraw inj1abc... 0.5")
+        await update.message.reply_text("Usage: /withdraw &lt;address&gt; &lt;amount&gt;\nExample: /withdraw inj1abc... 0.5", parse_mode="HTML")
         return
 
     dest_address, amount_str = args[0], args[1]
@@ -109,19 +114,19 @@ async def cmd_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         balance = await get_balance(wallet.address)
         if balance < amount + MIN_GAS_RESERVE:
             await update.message.reply_text(
-                f"Insufficient balance. You have `{balance:.6f} INJ` "
+                f"Insufficient balance. You have <code>{balance:.6f} INJ</code> "
                 f"(need {amount} + {MIN_GAS_RESERVE} for gas).",
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
             return
 
         tx_hash = await send_inj(wallet.encrypted_private_key, dest_address, amount)
         await update.message.reply_text(
-            f"Sent `{amount} INJ` to `{dest_address}`\nTx: `{tx_hash}`",
-            parse_mode="Markdown",
+            f"Sent <code>{amount} INJ</code> to <code>{_h(dest_address)}</code>\nTx: <code>{_h(tx_hash)}</code>",
+            parse_mode="HTML",
         )
     except Exception as e:
-        await update.message.reply_text(f"Withdrawal failed: {e}")
+        await update.message.reply_text(f"Withdrawal failed: {_h(str(e))}", parse_mode="HTML")
 
 
 async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -136,16 +141,13 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     parsed = parse_tip_command(message.text)
     if not parsed:
-        await message.reply_text(
-            f"Usage: @{bot_username} tip @username 0.1 INJ"
-        )
+        await message.reply_text(f"Usage: @{bot_username} tip @username 0.1 INJ")
         return
 
     target_username, amount = parsed
     sender = update.effective_user
 
     async with get_session() as session:
-        # Refresh sender username in case it changed
         await repository.update_username(session, sender.id, sender.username)
 
         sender_wallet = await repository.get_wallet_by_user_id(session, sender.id)
@@ -171,8 +173,8 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             if balance < amount + MIN_GAS_RESERVE:
                 await message.reply_text(
                     f"@{sender.username}, insufficient balance. "
-                    f"You have `{balance:.6f} INJ` (need {amount} + {MIN_GAS_RESERVE} for gas).",
-                    parse_mode="Markdown",
+                    f"You have <code>{balance:.6f} INJ</code> (need {amount} + {MIN_GAS_RESERVE} for gas).",
+                    parse_mode="HTML",
                 )
                 return
 
@@ -192,9 +194,10 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             )
 
             await message.reply_text(
-                f"Sent `{amount} INJ` from @{sender.username} to @{target_username}!\nTx: `{tx_hash}`",
-                parse_mode="Markdown",
+                f"✅ Sent <code>{amount} INJ</code> from @{_h(sender.username)} to @{_h(target_username)}!\n"
+                f"Tx: <code>{_h(tx_hash)}</code>",
+                parse_mode="HTML",
             )
 
         except Exception as e:
-            await message.reply_text(f"Tip failed: {e}")
+            await message.reply_text(f"Tip failed: {_h(str(e))}", parse_mode="HTML")
