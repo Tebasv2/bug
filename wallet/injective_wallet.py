@@ -118,9 +118,11 @@ async def send_inj(
         ) as r:
             result = await r.json()
 
-    tx_response = result.get("tx_response", {})
-    code = tx_response.get("code", 0)
-    tx_hash = tx_response.get("txhash", "")
+    tx_response = result.get("tx_response", result)
+    code = int(tx_response.get("code", 0))
     if code != 0:
-        raise RuntimeError(f"Transaction failed (code {code}): {tx_response.get('raw_log', '')}")
+        raise RuntimeError(f"Transaction failed (code {code}): {tx_response.get('raw_log', result)}")
+    tx_hash = tx_response.get("txhash") or tx_response.get("tx_hash") or tx_response.get("hash", "")
+    if not tx_hash:
+        raise RuntimeError(f"Broadcast response missing tx hash. Full response: {result}")
     return tx_hash

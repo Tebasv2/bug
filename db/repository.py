@@ -49,7 +49,7 @@ async def save_transaction(
     chat_id: int | None,
 ) -> TipTransaction:
     tx = TipTransaction(
-        id=tx_hash,
+        tx_hash=tx_hash,
         sender_user_id=sender_id,
         receiver_user_id=receiver_id,
         amount=amount,
