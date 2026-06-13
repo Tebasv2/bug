@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 from db.database import get_session
 from db import repository
 from wallet.injective_wallet import create_wallet, get_balance, send_inj, MIN_GAS_RESERVE
+from wallet.crypto import decrypt_private_key
 from utils.parsing import parse_tip_command
 
 
@@ -24,6 +25,9 @@ def _main_menu() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("📤 Withdraw", callback_data="withdraw_help"),
+        ],
+        [
+            InlineKeyboardButton("🔑 Export Key", callback_data="export_key"),
         ],
     ])
 
@@ -326,6 +330,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await msg.reply_text("Open a group and use /leaderboard there.")
         else:
             await _send_leaderboard(chat.id, chat.title or "this group", msg)
+    elif data == "export_key":
+        if update.effective_chat.type != "private":
+            await query.answer("For security, use this in DM with the bot.", show_alert=True)
+            return
+        async with get_session() as session:
+            wallet = await repository.get_wallet_by_user_id(session, user.id)
+        if not wallet:
+            await msg.reply_text("No wallet found. Use /start to create one.")
+            return
+        try:
+            private_key_hex = decrypt_private_key(wallet.encrypted_private_key)
+        except Exception:
+            await msg.reply_text("Failed to decrypt private key.")
+            return
+        await msg.reply_text(
+            f"🔑 <b>Your Private Key</b>\n\n"
+            f"<code>{_h(private_key_hex)}</code>\n\n"
+            f"⚠️ <b>Never share this with anyone.</b>",
+            parse_mode="HTML",
+            reply_markup=_main_menu(),
+        )
     elif data == "withdraw_help":
         await msg.reply_text(
             "📤 <b>Withdraw</b>\n\nSend me:\n<code>/withdraw inj1youraddress 0.5</code>",
