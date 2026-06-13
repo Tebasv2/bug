@@ -46,6 +46,20 @@ async def get_balance(address: str) -> Decimal:
     return Decimal(raw) / Decimal(10 ** INJ_DECIMALS)
 
 
+async def _fetch_account_info(client: AsyncClient, address: str) -> tuple[int, int]:
+    """Returns (sequence, account_number)."""
+    account = await client.fetch_account(address)
+    # Handle both object-style and dict-style responses
+    if hasattr(account, "sequence"):
+        return int(account.sequence), int(account.account_number)
+    # dict response: {"account": {"sequence": "0", "account_number": "123", ...}}
+    acc = account.get("account", account)
+    # Unwrap nested base_account if present
+    if "base_account" in acc:
+        acc = acc["base_account"]
+    return int(acc.get("sequence", 0)), int(acc.get("account_number", 0))
+
+
 async def send_inj(
     encrypted_sender_key: str,
     receiver_address: str,
@@ -62,9 +76,7 @@ async def send_inj(
     address = pub_key.to_address()
     acc_bech32 = address.to_acc_bech32()
 
-    account = await client.fetch_account(acc_bech32)
-    sequence = account.sequence
-    account_number = account.account_number
+    sequence, account_number = await _fetch_account_info(client, acc_bech32)
 
     # Convert to smallest unit (wei)
     amount_int = int(amount * Decimal(10 ** INJ_DECIMALS))
@@ -76,21 +88,21 @@ async def send_inj(
         denom="inj",
     )
 
+    gas_price = 500_000_000
+    gas_limit = 100_000
+    fee = [composer.coin(amount=gas_price * gas_limit, denom="inj")]
+
     tx = (
         Transaction()
         .with_messages(msg)
         .with_sequence(sequence)
         .with_account_num(account_number)
         .with_chain_id(network.chain_id)
+        .with_gas(gas_limit)
+        .with_fee(fee)
         .with_memo("")
         .with_timeout_height(client.timeout_height)
     )
-
-    gas_price = 500_000_000
-    gas_limit = 100_000
-    fee = [composer.coin(amount=gas_price * gas_limit, denom="inj")]
-
-    tx = tx.with_gas(gas_limit).with_fee(fee).with_memo("").with_timeout_height(client.timeout_height)
 
     sign_doc = tx.get_sign_doc(pub_key)
     sig = private_key.sign(sign_doc.SerializeToString())
