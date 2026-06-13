@@ -1,0 +1,15 @@
+app = "tipinjbot"
+primary_region = "iad"
+
+[build]
+
+[env]
+  INJECTIVE_NETWORK = "testnet"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[deploy]
+  strategy = "immediate"
