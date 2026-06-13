@@ -12,7 +12,7 @@ from .crypto import encrypt_private_key, decrypt_private_key
 
 INJ_DECIMALS = 18
 MIN_GAS_RESERVE = Decimal("0.01")
-GAS_LIMIT = 100_000
+GAS_LIMIT = 150_000
 GAS_PRICE = 500_000_000  # 0.5 gwei in inj
 
 
