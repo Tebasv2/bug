@@ -297,10 +297,13 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             else:
                 # Fungible token tip
                 balance = await get_balance(sender_wallet.address)
-                if balance < MIN_GAS_RESERVE:
+                is_inj = token_info["type"] == "native" and token_info["denom"] == "inj"
+                required = (amount + MIN_GAS_RESERVE) if is_inj else MIN_GAS_RESERVE
+                if balance < required:
                     await message.reply_text(
-                        f"@{_h(sender.username)}, insufficient INJ for gas. "
-                        f"You need at least <code>{MIN_GAS_RESERVE} INJ</code>.",
+                        f"@{_h(sender.username)}, insufficient balance. "
+                        f"You have <code>{balance:.6f} INJ</code>"
+                        + (f" (need <code>{amount} {token_info['display']}</code> + <code>{MIN_GAS_RESERVE} INJ</code> gas)." if is_inj else f" (need <code>{MIN_GAS_RESERVE} INJ</code> for gas)."),
                         parse_mode="HTML",
                     )
                     return

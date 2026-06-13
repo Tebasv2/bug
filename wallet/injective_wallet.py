@@ -151,6 +151,8 @@ async def _broadcast(tx_raw_bytes: bytes, network: Network) -> str:
     """Broadcast a signed tx and return the tx hash."""
     tx_b64 = base64.b64encode(tx_raw_bytes).decode()
     is_testnet = "testnet" in os.environ.get("INJECTIVE_NETWORK", "testnet")
+    # ASYNC on testnet to bypass mempool bugs; SYNC on mainnet to catch failures early
+    mode = "BROADCAST_MODE_ASYNC" if is_testnet else "BROADCAST_MODE_SYNC"
     lcd_endpoints = (
         [network.lcd_endpoint,
          "https://testnet.sentry.lcd.injective.network",
@@ -166,14 +168,14 @@ async def _broadcast(tx_raw_bytes: bytes, network: Network) -> str:
             try:
                 async with session.post(
                     f"{lcd}/cosmos/tx/v1beta1/txs",
-                    json={"tx_bytes": tx_b64, "mode": "BROADCAST_MODE_ASYNC"},
-                    timeout=aiohttp.ClientTimeout(total=15),
+                    json={"tx_bytes": tx_b64, "mode": mode},
+                    timeout=aiohttp.ClientTimeout(total=30),
                 ) as r:
                     result = await r.json()
                 tx_response = result.get("tx_response", result)
                 code = int(tx_response.get("code", 0))
                 if code not in (0, 19):
-                    last_error = f"code {code}: {tx_response.get('raw_log', result)}"
+                    last_error = f"Transaction failed: {tx_response.get('raw_log', tx_response)}"
                     continue
                 tx_hash = tx_response.get("txhash") or tx_response.get("tx_hash") or tx_response.get("hash", "")
                 if tx_hash:
@@ -181,7 +183,7 @@ async def _broadcast(tx_raw_bytes: bytes, network: Network) -> str:
             except Exception as e:
                 last_error = str(e)
                 continue
-    raise RuntimeError(f"All broadcast endpoints failed. Last error: {last_error}")
+    raise RuntimeError(last_error or "All broadcast endpoints failed")
 
 
 def _build_and_sign(msg, private_key, pub_key, sequence: int, account_number: int, network: Network) -> bytes:
