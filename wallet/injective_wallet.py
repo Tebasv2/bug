@@ -21,8 +21,11 @@ def _get_network() -> Network:
 def create_wallet() -> tuple[str, str]:
     """Returns (address, encrypted_private_key)."""
     result = PrivateKey.generate()
-    # injective-py returns (PrivateKey, mnemonic) tuple
-    private_key = result[0] if isinstance(result, tuple) else result
+    # injective-py 1.6.1 returns (mnemonic_str, PrivateKey) tuple
+    if isinstance(result, tuple):
+        private_key = next(r for r in result if not isinstance(r, str))
+    else:
+        private_key = result
     pub_key = private_key.to_public_key()
     address = pub_key.to_address()
     encrypted = encrypt_private_key(private_key.to_hex())
