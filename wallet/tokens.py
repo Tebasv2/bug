@@ -30,27 +30,13 @@ TOKENS: dict[str, dict] = {
         "decimals": 6,
         "display": "XIII",
     },
-    # Add more tokens below, e.g.:
-    # "XIII": {
-    #     "type": "cw20",
-    #     "contract": "inj1...",
-    #     "decimals": 6,
-    #     "display": "XIII",
-    # },
-    # "USDT": {
-    #     "type": "factory",
-    #     "denom": "factory/inj.../usdt",
-    #     "decimals": 6,
-    #     "display": "USDT",
-    # },
 }
 
 NFTS: dict[str, dict] = {
-    # Add NFT collections below, e.g.:
-    # "MASKED": {
-    #     "contract": "inj1...",
-    #     "display": "Masked",
-    # },
+    "MASKED": {
+        "contract": "",  # TODO: add Masked NFT CW721 contract address
+        "display": "Masked",
+    },
 }
 
 
@@ -63,8 +49,11 @@ def resolve_token(symbol: str) -> dict | None:
 
 
 def resolve_nft(name: str) -> dict | None:
-    """Case-insensitive lookup in NFTS."""
-    return next(
+    """Case-insensitive lookup in NFTS. Returns None if contract not set."""
+    entry = next(
         (v for k, v in NFTS.items() if k.upper() == name.upper()),
         None,
     )
+    if entry and not entry.get("contract"):
+        return None
+    return entry
