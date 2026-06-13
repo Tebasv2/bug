@@ -21,7 +21,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             return
 
-        address, encrypted_key = create_wallet()
+        address, encrypted_key, private_key_hex, mnemonic = create_wallet()
         await repository.create_wallet(
             session,
             user_id=user.id,
@@ -31,9 +31,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
     await update.message.reply_text(
-        f"Wallet created! \n\n"
-        f"Address: `{address}`\n\n"
-        f"Fund it with INJ and you're ready to tip. Use /balance to check your balance.",
+        f"✅ *Wallet Created!*\n\n"
+        f"*Address:*\n`{address}`\n\n"
+        f"*Private Key:*\n`{private_key_hex}`\n\n"
+        f"*Secret Phrase (12 words):*\n`{mnemonic}`\n\n"
+        f"⚠️ *Save your secret phrase and private key somewhere safe — they will NOT be shown again. Anyone with these can access your funds.*\n\n"
+        f"Fund your wallet with INJ and use /balance to check your balance.",
         parse_mode="Markdown",
     )
 

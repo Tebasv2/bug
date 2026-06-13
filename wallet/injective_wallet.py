@@ -18,18 +18,21 @@ def _get_network() -> Network:
     return Network.testnet() if net == "testnet" else Network.mainnet()
 
 
-def create_wallet() -> tuple[str, str]:
-    """Returns (address, encrypted_private_key)."""
+def create_wallet() -> tuple[str, str, str, str]:
+    """Returns (address, encrypted_private_key, private_key_hex, mnemonic)."""
     result = PrivateKey.generate()
     # injective-py 1.6.1 returns (mnemonic_str, PrivateKey) tuple
     if isinstance(result, tuple):
+        mnemonic = next((r for r in result if isinstance(r, str)), "")
         private_key = next(r for r in result if not isinstance(r, str))
     else:
+        mnemonic = ""
         private_key = result
     pub_key = private_key.to_public_key()
     address = pub_key.to_address()
-    encrypted = encrypt_private_key(private_key.to_hex())
-    return address.to_acc_bech32(), encrypted
+    private_key_hex = private_key.to_hex()
+    encrypted = encrypt_private_key(private_key_hex)
+    return address.to_acc_bech32(), encrypted, private_key_hex, mnemonic
 
 
 async def get_balance(address: str) -> Decimal:
