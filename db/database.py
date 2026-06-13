@@ -5,7 +5,7 @@ _engine = None
 _session_factory = None
 
 
-async def init_db(db_path: str = "injective_tips.db"):
+async def init_db(db_path: str = "/data/injective_tips.db"):
     global _engine, _session_factory
     _engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", echo=False)
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False)

@@ -1,15 +1,20 @@
-app = "tipinjbot"
-primary_region = "iad"
+app = "tipinj"
+primary_region = "arn"
 
 [build]
+  dockerfile = "Dockerfile"
 
 [env]
   INJECTIVE_NETWORK = "testnet"
 
 [[vm]]
-  memory = "256mb"
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
 
 [deploy]
   strategy = "immediate"
+
+[[mounts]]
+  source = "tipbot_data"
+  destination = "/data"
