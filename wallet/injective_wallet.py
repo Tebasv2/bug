@@ -105,21 +105,40 @@ async def send_inj(
     sig = private_key.sign(sign_doc.SerializeToString())
     tx_raw_bytes = tx.get_tx_data(sig, pub_key)
 
-    # Broadcast via LCD REST — more reliable than gRPC for tx submission
     tx_b64 = base64.b64encode(tx_raw_bytes).decode()
-    lcd = network.lcd_endpoint
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            f"{lcd}/cosmos/tx/v1beta1/txs",
-            json={"tx_bytes": tx_b64, "mode": "BROADCAST_MODE_SYNC"},
-        ) as r:
-            result = await r.json()
 
-    tx_response = result.get("tx_response", result)
-    code = int(tx_response.get("code", 0))
-    if code != 0:
-        raise RuntimeError(f"Transaction failed (code {code}): {tx_response.get('raw_log', result)}")
-    tx_hash = tx_response.get("txhash") or tx_response.get("tx_hash") or tx_response.get("hash", "")
-    if not tx_hash:
-        raise RuntimeError(f"Broadcast response missing tx hash. Full response: {result}")
-    return tx_hash
+    # Try multiple LCD endpoints — testnet nodes can have mempool bugs
+    lcd_endpoints = [
+        network.lcd_endpoint,
+        "https://testnet.sentry.lcd.injective.network",
+        "https://k8s.testnet.lcd.injective.network",
+    ] if "testnet" in (os.environ.get("INJECTIVE_NETWORK", "testnet")) else [
+        network.lcd_endpoint,
+        "https://lcd.injective.network",
+        "https://sentry.lcd.injective.network",
+    ]
+
+    last_error = None
+    async with aiohttp.ClientSession() as session:
+        for lcd in lcd_endpoints:
+            try:
+                async with session.post(
+                    f"{lcd}/cosmos/tx/v1beta1/txs",
+                    json={"tx_bytes": tx_b64, "mode": "BROADCAST_MODE_ASYNC"},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as r:
+                    result = await r.json()
+
+                tx_response = result.get("tx_response", result)
+                code = int(tx_response.get("code", 0))
+                if code not in (0, 19):  # 19 = already in mempool (ok)
+                    last_error = f"code {code}: {tx_response.get('raw_log', result)}"
+                    continue
+                tx_hash = tx_response.get("txhash") or tx_response.get("tx_hash") or tx_response.get("hash", "")
+                if tx_hash:
+                    return tx_hash
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+    raise RuntimeError(f"All broadcast endpoints failed. Last error: {last_error}")
