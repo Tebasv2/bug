@@ -34,7 +34,7 @@ TOKENS: dict[str, dict] = {
 
 NFTS: dict[str, dict] = {
     "MASKED": {
-        "contract": "",  # TODO: add Masked NFT CW721 contract address
+        "contract": "inj19lsr0vk0h42k0mspgym552hl432a9et0nhd4nj",
         "display": "Masked",
     },
 }
