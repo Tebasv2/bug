@@ -18,6 +18,12 @@ TOKENS: dict[str, dict] = {
         "decimals": 18,
         "display": "INJ",
     },
+    "USDC": {
+        "type": "native",
+        "denom": "peggy0xA0C59fF5a080D2b954d0c75e46E22a0c371235a",
+        "decimals": 6,
+        "display": "USDC",
+    },
     # Add more tokens below, e.g.:
     # "XIII": {
     #     "type": "cw20",
