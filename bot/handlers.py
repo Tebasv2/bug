@@ -79,7 +79,7 @@ async def _send_history(user_id: int, message: Message) -> None:
         for t in sent:
             recv = wallets.get(t.receiver_user_id)
             name = f"@{_h(recv.username)}" if recv and recv.username else f"user {t.receiver_user_id}"
-            lines.append(f"  ➡️ {name} — <code>{Decimal(t.amount):.3f} INJ</code>")
+            lines.append(f"  ➡️ {name} — <code>{Decimal(t.amount):.3f} {_h(t.denom or 'INJ')}</code>")
     else:
         lines.append("<b>Sent:</b> none yet")
     lines.append("")
@@ -88,7 +88,7 @@ async def _send_history(user_id: int, message: Message) -> None:
         for t in received:
             sndr = wallets.get(t.sender_user_id)
             name = f"@{_h(sndr.username)}" if sndr and sndr.username else f"user {t.sender_user_id}"
-            lines.append(f"  ⬅️ {name} — <code>{Decimal(t.amount):.3f} INJ</code>")
+            lines.append(f"  ⬅️ {name} — <code>{Decimal(t.amount):.3f} {_h(t.denom or 'INJ')}</code>")
     else:
         lines.append("<b>Received:</b> none yet")
 
@@ -288,7 +288,8 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
                 await repository.save_transaction(
                     session, tx_hash=tx_hash, sender_id=sender.id,
-                    receiver_id=receiver_wallet.user_id, amount=token_id,
+                    receiver_id=receiver_wallet.user_id, amount="0",
+                    denom=f"NFT:{nft_info['display']}#{token_id}",
                     chat_id=message.chat_id,
                 )
                 tip_text = f"<code>#{_h(token_id)}</code> {_h(nft_info['display'])}"
@@ -314,7 +315,7 @@ async def handle_tip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 await repository.save_transaction(
                     session, tx_hash=tx_hash, sender_id=sender.id,
                     receiver_id=receiver_wallet.user_id,
-                    amount=f"{amount} {token_info['display']}",
+                    amount=str(amount), denom=token_info['display'],
                     chat_id=message.chat_id,
                 )
                 tip_text = f"<code>{amount} {_h(token_info['display'])}</code>"

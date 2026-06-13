@@ -48,12 +48,14 @@ async def save_transaction(
     receiver_id: int,
     amount: str,
     chat_id: int | None,
+    denom: str = "inj",
 ) -> TipTransaction:
     tx = TipTransaction(
         tx_hash=tx_hash,
         sender_user_id=sender_id,
         receiver_user_id=receiver_id,
         amount=amount,
+        denom=denom,
         chat_id=chat_id,
     )
     session.add(tx)
