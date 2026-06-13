@@ -3,7 +3,6 @@ import base64
 import aiohttp
 from decimal import Decimal
 from pyinjective.core.network import Network
-from pyinjective.async_client import AsyncClient
 from pyinjective.transaction import Transaction
 from pyinjective.wallet import PrivateKey
 from pyinjective.proto.cosmos.bank.v1beta1 import tx_pb2 as bank_tx_pb
@@ -69,8 +68,6 @@ async def send_inj(
 ) -> str:
     """Broadcasts an INJ transfer. Returns tx hash."""
     network = _get_network()
-    client = AsyncClient(network)
-    await client.sync_timeout_height()
 
     private_key = PrivateKey.from_hex(decrypt_private_key(encrypted_sender_key))
     pub_key = private_key.to_public_key()
@@ -101,7 +98,7 @@ async def send_inj(
         .with_gas(GAS_LIMIT)
         .with_fee(fee)
         .with_memo("")
-        .with_timeout_height(client.timeout_height)
+        .with_timeout_height(0)
     )
 
     sign_doc = tx.get_sign_doc(pub_key)
