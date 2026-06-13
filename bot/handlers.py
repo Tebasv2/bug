@@ -78,7 +78,7 @@ async def _send_history(user_id: int, message: Message) -> None:
         for t in sent:
             recv = wallets.get(t.receiver_user_id)
             name = f"@{_h(recv.username)}" if recv and recv.username else f"user {t.receiver_user_id}"
-            lines.append(f"  ➡️ {name} — <code>{t.amount} INJ</code>")
+            lines.append(f"  ➡️ {name} — <code>{Decimal(t.amount):.3f} INJ</code>")
     else:
         lines.append("<b>Sent:</b> none yet")
     lines.append("")
@@ -87,7 +87,7 @@ async def _send_history(user_id: int, message: Message) -> None:
         for t in received:
             sndr = wallets.get(t.sender_user_id)
             name = f"@{_h(sndr.username)}" if sndr and sndr.username else f"user {t.sender_user_id}"
-            lines.append(f"  ⬅️ {name} — <code>{t.amount} INJ</code>")
+            lines.append(f"  ⬅️ {name} — <code>{Decimal(t.amount):.3f} INJ</code>")
     else:
         lines.append("<b>Received:</b> none yet")
 
