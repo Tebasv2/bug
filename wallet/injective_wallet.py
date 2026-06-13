@@ -5,21 +5,20 @@ from pyinjective.core.network import Network
 from pyinjective.async_client import AsyncClient
 from pyinjective.transaction import Transaction
 from pyinjective.wallet import PrivateKey
-from pyinjective.composer import Composer
+from pyinjective.proto.cosmos.bank.v1beta1 import tx_pb2 as bank_tx_pb
+from pyinjective.proto.cosmos.base.v1beta1 import coin_pb2
 from .crypto import encrypt_private_key, decrypt_private_key
 
 
 INJ_DECIMALS = 18
 MIN_GAS_RESERVE = Decimal("0.01")
+GAS_LIMIT = 100_000
+GAS_PRICE = 500_000_000  # 0.5 gwei in inj
 
 
 def _get_network() -> Network:
     net = os.environ.get("INJECTIVE_NETWORK", "testnet").lower()
     return Network.testnet() if net == "testnet" else Network.mainnet()
-
-
-def _lcd_endpoint(network: Network) -> str:
-    return network.lcd_endpoint
 
 
 def create_wallet() -> tuple[str, str, str, str]:
@@ -48,8 +47,7 @@ async def _lcd_get(url: str) -> dict:
 async def get_balance(address: str) -> Decimal:
     """Returns INJ balance as human-readable Decimal."""
     network = _get_network()
-    lcd = _lcd_endpoint(network)
-    data = await _lcd_get(f"{lcd}/cosmos/bank/v1beta1/balances/{address}/by_denom?denom=inj")
+    data = await _lcd_get(f"{network.lcd_endpoint}/cosmos/bank/v1beta1/balances/{address}/by_denom?denom=inj")
     raw = int(data.get("balance", {}).get("amount", "0"))
     return Decimal(raw) / Decimal(10 ** INJ_DECIMALS)
 
@@ -57,10 +55,8 @@ async def get_balance(address: str) -> Decimal:
 async def _fetch_account_info(address: str) -> tuple[int, int]:
     """Returns (sequence, account_number) via LCD REST."""
     network = _get_network()
-    lcd = _lcd_endpoint(network)
-    data = await _lcd_get(f"{lcd}/cosmos/auth/v1beta1/accounts/{address}")
+    data = await _lcd_get(f"{network.lcd_endpoint}/cosmos/auth/v1beta1/accounts/{address}")
     acc = data.get("account", {})
-    # Injective wraps in base_account
     base = acc.get("base_account", acc)
     return int(base.get("sequence", 0)), int(base.get("account_number", 0))
 
@@ -73,7 +69,6 @@ async def send_inj(
     """Broadcasts an INJ transfer. Returns tx hash."""
     network = _get_network()
     client = AsyncClient(network)
-    composer = Composer(network=network.string())
     await client.sync_timeout_height()
 
     private_key = PrivateKey.from_hex(decrypt_private_key(encrypted_sender_key))
@@ -83,16 +78,18 @@ async def send_inj(
 
     sequence, account_number = await _fetch_account_info(acc_bech32)
 
-    msg = composer.MsgSend(
+    # Convert to smallest unit (attoINJ)
+    amount_wei = str(int(amount * Decimal(10 ** INJ_DECIMALS)))
+    fee_wei = str(GAS_PRICE * GAS_LIMIT)
+
+    # Build MsgSend directly from protobuf — bypasses Composer token registry
+    msg = bank_tx_pb.MsgSend(
         from_address=acc_bech32,
         to_address=receiver_address,
-        amount=float(amount),
-        denom="inj",
+        amount=[coin_pb2.Coin(denom="inj", amount=amount_wei)],
     )
 
-    gas_price = 500_000_000
-    gas_limit = 100_000
-    fee = [composer.coin(amount=gas_price * gas_limit, denom="inj")]
+    fee = [coin_pb2.Coin(denom="inj", amount=fee_wei)]
 
     tx = (
         Transaction()
@@ -100,7 +97,7 @@ async def send_inj(
         .with_sequence(sequence)
         .with_account_num(account_number)
         .with_chain_id(network.chain_id)
-        .with_gas(gas_limit)
+        .with_gas(GAS_LIMIT)
         .with_fee(fee)
         .with_memo("")
         .with_timeout_height(client.timeout_height)
