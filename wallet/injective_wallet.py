@@ -1,4 +1,5 @@
 import os
+import aiohttp
 from decimal import Decimal
 from pyinjective.core.network import Network
 from pyinjective.async_client import AsyncClient
@@ -9,7 +10,6 @@ from .crypto import encrypt_private_key, decrypt_private_key
 
 
 INJ_DECIMALS = 18
-# Minimum balance required to cover gas (0.01 INJ)
 MIN_GAS_RESERVE = Decimal("0.01")
 
 
@@ -18,10 +18,13 @@ def _get_network() -> Network:
     return Network.testnet() if net == "testnet" else Network.mainnet()
 
 
+def _lcd_endpoint(network: Network) -> str:
+    return network.lcd_endpoint
+
+
 def create_wallet() -> tuple[str, str, str, str]:
     """Returns (address, encrypted_private_key, private_key_hex, mnemonic)."""
     result = PrivateKey.generate()
-    # injective-py 1.6.1 returns (mnemonic_str, PrivateKey) tuple
     if isinstance(result, tuple):
         mnemonic = next((r for r in result if isinstance(r, str)), "")
         private_key = next(r for r in result if not isinstance(r, str))
@@ -35,29 +38,31 @@ def create_wallet() -> tuple[str, str, str, str]:
     return address.to_acc_bech32(), encrypted, private_key_hex, mnemonic
 
 
+async def _lcd_get(url: str) -> dict:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            return await resp.json()
+
+
 async def get_balance(address: str) -> Decimal:
     """Returns INJ balance as human-readable Decimal."""
     network = _get_network()
-    client = AsyncClient(network)
-    await client.sync_timeout_height()
-    denom = "inj"
-    resp = await client.fetch_bank_balance(address=address, denom=denom)
-    raw = int(resp.get("balance", {}).get("amount", "0"))
+    lcd = _lcd_endpoint(network)
+    data = await _lcd_get(f"{lcd}/cosmos/bank/v1beta1/balances/{address}/by_denom?denom=inj")
+    raw = int(data.get("balance", {}).get("amount", "0"))
     return Decimal(raw) / Decimal(10 ** INJ_DECIMALS)
 
 
-async def _fetch_account_info(client: AsyncClient, address: str) -> tuple[int, int]:
-    """Returns (sequence, account_number)."""
-    account = await client.fetch_account(address)
-    # Handle both object-style and dict-style responses
-    if hasattr(account, "sequence"):
-        return int(account.sequence), int(account.account_number)
-    # dict response: {"account": {"sequence": "0", "account_number": "123", ...}}
-    acc = account.get("account", account)
-    # Unwrap nested base_account if present
-    if "base_account" in acc:
-        acc = acc["base_account"]
-    return int(acc.get("sequence", 0)), int(acc.get("account_number", 0))
+async def _fetch_account_info(address: str) -> tuple[int, int]:
+    """Returns (sequence, account_number) via LCD REST."""
+    network = _get_network()
+    lcd = _lcd_endpoint(network)
+    data = await _lcd_get(f"{lcd}/cosmos/auth/v1beta1/accounts/{address}")
+    acc = data.get("account", {})
+    # Injective wraps in base_account
+    base = acc.get("base_account", acc)
+    return int(base.get("sequence", 0)), int(base.get("account_number", 0))
 
 
 async def send_inj(
@@ -76,9 +81,8 @@ async def send_inj(
     address = pub_key.to_address()
     acc_bech32 = address.to_acc_bech32()
 
-    sequence, account_number = await _fetch_account_info(client, acc_bech32)
+    sequence, account_number = await _fetch_account_info(acc_bech32)
 
-    # Convert to smallest unit (wei)
     amount_int = int(amount * Decimal(10 ** INJ_DECIMALS))
 
     msg = composer.msg_send(
