@@ -83,12 +83,10 @@ async def send_inj(
 
     sequence, account_number = await _fetch_account_info(acc_bech32)
 
-    amount_int = int(amount * Decimal(10 ** INJ_DECIMALS))
-
     msg = composer.MsgSend(
         from_address=acc_bech32,
         to_address=receiver_address,
-        amount=amount_int,
+        amount=float(amount),
         denom="inj",
     )
 
