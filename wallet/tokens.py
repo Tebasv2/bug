@@ -24,6 +24,12 @@ TOKENS: dict[str, dict] = {
         "decimals": 6,
         "display": "USDC",
     },
+    "XIII": {
+        "type": "factory",
+        "denom": "factory/inj18flmwwaxxqj8m8l5zl8xhjrnah98fcjp3gcy3e/XIII",
+        "decimals": 6,
+        "display": "XIII",
+    },
     # Add more tokens below, e.g.:
     # "XIII": {
     #     "type": "cw20",
